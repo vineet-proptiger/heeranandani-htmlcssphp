@@ -110,7 +110,7 @@ try {
 
   $comments = $get('comments');
 
-  /* ── 1. Google Sheet ── */
+  /* ── 1. Google Sheet (DISABLED - COMMENTED OUT) ──
   $sheetPayload = [
     'secret'        => $get('secret') ?: (defined('SECRET_KEY') ? SECRET_KEY : ''),
 
@@ -169,6 +169,7 @@ try {
     $sheetResponse = curl_exec($sh);
     curl_close($sh);
   }
+  ── END Google Sheet DISABLED ── */
 
   /* ── 2. Proptiger CRM ── */
   $proptigerBase = defined('PROPTIGER_URL') ? PROPTIGER_URL : 'https://www.proptiger.com/data/v1/entity/enquiry';

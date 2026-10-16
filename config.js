@@ -18,7 +18,8 @@ window.CITY_ID = "1";
 window.SHEET_NAME = "Pune";
 window.SECRET_KEY = "6c7f9ad8b2a1e0f4d5a8c0b9f6e2a4d190";
 
-window.SHEET_WEBHOOK = "https://script.google.com/macros/s/AKfycbw2MGrCI0lVGZZD049RrqM52ubNIHHZLzuk7mIg9KMVacJREV9sw05jnPMvT5OeNtWt/exec";
+// window.SHEET_WEBHOOK = "https://script.google.com/macros/s/AKfycbw2MGrCI0lVGZZD049RrqM52ubNIHHZLzuk7mIg9KMVacJREV9sw05jnPMvT5OeNtWt/exec";
+window.SHEET_WEBHOOK = "";
 window.PROPTIGER_URL = "https://www.proptiger.com/data/v1/entity/enquiry";
 window.GTM_ID = "GTM-575H8R87";
 

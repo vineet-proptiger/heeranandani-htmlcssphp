@@ -298,19 +298,8 @@ function RSLeadSubmit(form, event) {
     .then(async (res) => {
       // If server does not run PHP (e.g. Cloudflare Workers / Static CDN returns 405 or 404)
       if (res.status === 405 || res.status === 404 || (!res.ok && res.status !== 400)) {
-        console.warn("PHP backend not active on this static host (HTTP " + res.status + "). Executing client-side fallback...");
-        const webhookUrl = window.SHEET_WEBHOOK;
-        if (webhookUrl) {
-          try {
-            await fetch(webhookUrl, {
-              method: "POST",
-              mode: "no-cors",
-              body: new URLSearchParams(payload)
-            });
-          } catch (e) {
-            console.error("Webhook fallback error:", e);
-          }
-        }
+        console.warn("PHP backend not active on this static host (HTTP " + res.status + ").");
+        // Google Sheet disabled as requested by user
         return { status: true, fallback: true };
       }
       return res.json();
