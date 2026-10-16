@@ -243,8 +243,14 @@ function RSLeadSubmit(form, event) {
       document.cookie = `lead_trk_${window.PROJECT_ID}_${safeGclid}=0; max-age=0; path=/`;
     }
 
-    if (currentCount >= 3) {
-      // Simulate fake success response without sending fetch (Max 3 submissions reached)
+    const isTestingHost = window.location.hostname.includes('.workers.dev') ||
+                          window.location.hostname.includes('.pages.dev') ||
+                          window.location.hostname.includes('localhost') ||
+                          window.location.hostname.includes('127.0.0.1') ||
+                          (typeof window.isTestMode === 'function' && window.isTestMode());
+
+    if (!isTestingHost && currentCount >= 3) {
+      // Simulate fake success response without sending fetch (Max 3 submissions reached in production)
       setTimeout(() => {
         showThankYouScreen(form);
       }, 500);
