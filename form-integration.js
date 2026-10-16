@@ -257,16 +257,22 @@ function RSLeadSubmit(form, event) {
   }
 
   /* ---------- PREPARE FORM PAYLOAD (Exact Next.js Replica) ---------- */
+  const pId = window.PROJECT_ID || '3523522';
+  const pName = window.PROJECT_NAME || 'Hiranandani Krisala Everland';
+  const sName = window.SHEET_NAME || 'Pune';
+  const secKey = window.SECRET_KEY || '6c7f9ad8b2a1e0f4d5a8c0b9f6e2a4d190';
+  const pCity = window.CITY_DISPLAY || window.CITY_SLUG || 'Pune';
+
   const payload = new FormData();
   payload.append('fullname', name.value.trim());
   payload.append('email', (email && email.value) ? email.value.trim() : '');
   payload.append('phone', phone.value.trim());
-  payload.append('projectId', window.PROJECT_ID || '');
-  payload.append('projectName', window.PROJECT_NAME || '');
+  payload.append('projectId', pId);
+  payload.append('projectName', pName);
   payload.append('form_name', form.querySelector('[name="form_name"]')?.value || 'Popup Modal');
-  payload.append('sheet_name', window.SHEET_NAME || '');
-  payload.append('secret', window.SECRET_KEY || '');
-  payload.append('city', window.CITY_DISPLAY || window.CITY_SLUG || '');
+  payload.append('sheet_name', sName);
+  payload.append('secret', secKey);
+  payload.append('city', pCity);
 
   // Form custom fields (comments / query)
   const commentsInput = form.querySelector('[name="comments"]');
@@ -289,13 +295,33 @@ function RSLeadSubmit(form, event) {
     body: payload,
     cache: "no-store",
   })
-    .then((res) => res.json())
+    .then(async (res) => {
+      // If server does not run PHP (e.g. Cloudflare Workers / Static CDN returns 405 or 404)
+      if (res.status === 405 || res.status === 404 || (!res.ok && res.status !== 400)) {
+        console.warn("PHP backend not active on this static host (HTTP " + res.status + "). Executing client-side fallback...");
+        const webhookUrl = window.SHEET_WEBHOOK;
+        if (webhookUrl) {
+          try {
+            await fetch(webhookUrl, {
+              method: "POST",
+              mode: "no-cors",
+              body: new URLSearchParams(payload)
+            });
+          } catch (e) {
+            console.error("Webhook fallback error:", e);
+          }
+        }
+        return { status: true, fallback: true };
+      }
+      return res.json();
+    })
     .then((res) => {
       if (res && (res.status === true || res.result === "success")) {
         // Update GCLID Count on Success (Exact Tata Ghansoli Replica)
+        const prjId = window.PROJECT_ID || '3523522';
         if (form._gclid) {
           const newCount = form._currentCount + 1;
-          document.cookie = `lead_trk_${window.PROJECT_ID}_${form._gclid}=${newCount}; max-age=2592000; path=/`;
+          document.cookie = `lead_trk_${prjId}_${form._gclid}=${newCount}; max-age=2592000; path=/`;
 
           const lsKey = `lead_trk_data_${window.PROJECT_ID}`;
           let lsData = {};
