@@ -2065,8 +2065,11 @@
           height: 100%;
           object-fit: cover;
           user-select: none;
-          pointer-events: none;
+          -webkit-user-select: none;
+          -webkit-user-drag: none;
+          pointer-events: auto;
           display: block;
+          cursor: pointer;
         }
 
         .gallery-slide-overlay {
@@ -2428,8 +2431,11 @@
           height: 100%;
           object-fit: cover;
           user-select: none;
-          pointer-events: none;
+          -webkit-user-select: none;
+          -webkit-user-drag: none;
+          pointer-events: auto;
           display: block;
+          cursor: pointer;
         }
 
         .amenities-slide-overlay {
@@ -5002,10 +5008,12 @@
       .gallery-slide,
       .amenities-slide {
         cursor: pointer !important;
+        pointer-events: auto !important;
       }
       .gallery-slide *,
       .amenities-slide * {
         cursor: pointer !important;
+        pointer-events: auto !important;
       }
       .custom-lightbox-content {
         position: relative !important;
@@ -5066,6 +5074,29 @@
       }
       .custom-lightbox-arrow-btn:hover {
         background: rgba(255, 255, 255, 0.3) !important;
+      }
+      /* On desktop, size the overlay against the viewport and let the preview
+         use the available landscape space instead of inheriting a mobile width. */
+      @media (min-width: 768px) {
+        .custom-lightbox-modal {
+          inset: 0 !important;
+          width: 100% !important;
+          min-width: 100% !important;
+          max-width: none !important;
+          height: 100% !important;
+          min-height: 100% !important;
+          max-height: none !important;
+          padding: 48px !important;
+        }
+        .custom-lightbox-content {
+          width: min(92vw, 1600px) !important;
+          max-width: 92vw !important;
+          max-height: 88vh !important;
+        }
+        .custom-lightbox-content img {
+          max-width: min(88vw, 1500px) !important;
+          max-height: 78vh !important;
+        }
       }
     </style>
 
@@ -5204,6 +5235,15 @@
     <!-- Dedicated Lightbox Controller (Fail-Safe & Instant Click Handlers) -->
     <script>
       (function() {
+        // Keep fixed-position lightboxes outside transformed/overflow-hidden page
+        // containers. Those ancestors can trap the overlay on desktop browsers.
+        ['masterplan-lightbox', 'gallery-lightbox', 'amenities-lightbox'].forEach(function(id) {
+          const lightbox = document.getElementById(id);
+          if (lightbox && lightbox.parentElement !== document.body) {
+            document.body.appendChild(lightbox);
+          }
+        });
+
         window.galleryData = [
           { src: "images/gallery/g1.webp", title: "Majestic High-Rise Residential Towers" },
           { src: "images/gallery/g2.webp", title: "Aerial Night View & Premium Amenities" },
@@ -5233,7 +5273,18 @@
         let curAmenitiesIdx = 0;
 
         window.openGalleryLightbox = function(idx) {
-          curGalleryIdx = (typeof idx === 'number' && idx >= 0 && idx < window.galleryData.length) ? idx : 0;
+          let index = 0;
+          if (typeof idx === 'number' && !isNaN(idx)) {
+            index = idx;
+          } else if (typeof idx === 'string' && !isNaN(parseInt(idx, 10))) {
+            index = parseInt(idx, 10);
+          } else if (typeof curGalleryIdx === 'number' && !isNaN(curGalleryIdx)) {
+            index = curGalleryIdx;
+          }
+          const total = window.galleryData ? window.galleryData.length : 10;
+          index = Math.max(0, Math.min(index, total - 1));
+          curGalleryIdx = index;
+
           const lb = document.getElementById("gallery-lightbox");
           const img = document.getElementById("gallery-lightbox-img");
           const cap = document.getElementById("gallery-lightbox-caption");
@@ -5244,6 +5295,7 @@
             if (counter) counter.textContent = (curGalleryIdx + 1) + " / " + window.galleryData.length;
             lb.classList.remove("hidden");
             lb.classList.add("is-open", "flex");
+            lb.style.display = "flex";
             document.body.style.overflow = "hidden";
           }
         };
@@ -5253,6 +5305,7 @@
           if (lb) {
             lb.classList.remove("is-open", "flex");
             lb.classList.add("hidden");
+            lb.style.display = "none";
             document.body.style.overflow = "";
           }
         };
@@ -5270,7 +5323,18 @@
         };
 
         window.openAmenitiesLightbox = function(idx) {
-          curAmenitiesIdx = (typeof idx === 'number' && idx >= 0 && idx < window.amenitiesData.length) ? idx : 0;
+          let index = 0;
+          if (typeof idx === 'number' && !isNaN(idx)) {
+            index = idx;
+          } else if (typeof idx === 'string' && !isNaN(parseInt(idx, 10))) {
+            index = parseInt(idx, 10);
+          } else if (typeof curAmenitiesIdx === 'number' && !isNaN(curAmenitiesIdx)) {
+            index = curAmenitiesIdx;
+          }
+          const total = window.amenitiesData ? window.amenitiesData.length : 9;
+          index = Math.max(0, Math.min(index, total - 1));
+          curAmenitiesIdx = index;
+
           const lb = document.getElementById("amenities-lightbox");
           const img = document.getElementById("amenities-lightbox-img");
           const cap = document.getElementById("amenities-lightbox-caption");
@@ -5281,6 +5345,7 @@
             if (counter) counter.textContent = (curAmenitiesIdx + 1) + " / " + window.amenitiesData.length;
             lb.classList.remove("hidden");
             lb.classList.add("is-open", "flex");
+            lb.style.display = "flex";
             document.body.style.overflow = "hidden";
           }
         };
@@ -5290,6 +5355,7 @@
           if (lb) {
             lb.classList.remove("is-open", "flex");
             lb.classList.add("hidden");
+            lb.style.display = "none";
             document.body.style.overflow = "";
           }
         };
@@ -5311,6 +5377,7 @@
           if (lb) {
             lb.classList.remove("hidden");
             lb.classList.add('is-open', 'flex');
+            lb.style.display = "flex";
             document.body.style.overflow = 'hidden';
           }
         };
@@ -5320,23 +5387,36 @@
           if (lb) {
             lb.classList.remove('is-open', 'flex');
             lb.classList.add('hidden');
+            lb.style.display = "none";
             document.body.style.overflow = '';
           }
         };
 
-        // Attach direct click listeners to all carousel slides to guarantee clicks always open lightbox
+        // Attach direct click listeners to all carousel slides (supports infinite clones)
         function attachCarouselClickListeners() {
-          document.querySelectorAll('.gallery-slide').forEach(function(slide, idx) {
+          document.querySelectorAll('.gallery-slide').forEach(function(slide) {
             slide.style.cursor = 'pointer';
+            let idx = slide.getAttribute('data-real-idx');
+            if (idx === null || idx === '' || isNaN(parseInt(idx, 10))) {
+              const match = (slide.getAttribute('onclick') || '').match(/\d+/);
+              idx = match ? match[0] : '0';
+            }
+            const parsedIdx = parseInt(idx, 10);
             slide.onclick = function(e) {
-              window.openGalleryLightbox(idx);
+              window.openGalleryLightbox(parsedIdx);
             };
           });
 
-          document.querySelectorAll('.amenities-slide').forEach(function(slide, idx) {
+          document.querySelectorAll('.amenities-slide').forEach(function(slide) {
             slide.style.cursor = 'pointer';
+            let idx = slide.getAttribute('data-real-idx');
+            if (idx === null || idx === '' || isNaN(parseInt(idx, 10))) {
+              const match = (slide.getAttribute('onclick') || '').match(/\d+/);
+              idx = match ? match[0] : '0';
+            }
+            const parsedIdx = parseInt(idx, 10);
             slide.onclick = function(e) {
-              window.openAmenitiesLightbox(idx);
+              window.openAmenitiesLightbox(parsedIdx);
             };
           });
         }
@@ -5346,6 +5426,35 @@
         } else {
           attachCarouselClickListeners();
         }
+
+        // Global Capture-Phase Click Delegation (Guarantees desktop & mobile clicks always fire)
+        document.addEventListener('click', function(e) {
+          if (e.target.closest('#gallery-prev-btn, #gallery-next-btn, #amenities-prev-btn, #amenities-next-btn, .gallery-nav-btn, .amenities-nav-btn, .custom-lightbox-close-btn, .custom-lightbox-arrow-btn')) {
+            return;
+          }
+
+          const gSlide = e.target.closest('.gallery-slide');
+          if (gSlide) {
+            let idx = gSlide.getAttribute('data-real-idx');
+            if (idx === null || idx === '' || isNaN(parseInt(idx, 10))) {
+              const match = (gSlide.getAttribute('onclick') || '').match(/\d+/);
+              idx = match ? match[0] : '0';
+            }
+            window.openGalleryLightbox(parseInt(idx, 10));
+            return;
+          }
+
+          const aSlide = e.target.closest('.amenities-slide');
+          if (aSlide) {
+            let idx = aSlide.getAttribute('data-real-idx');
+            if (idx === null || idx === '' || isNaN(parseInt(idx, 10))) {
+              const match = (aSlide.getAttribute('onclick') || '').match(/\d+/);
+              idx = match ? match[0] : '0';
+            }
+            window.openAmenitiesLightbox(parseInt(idx, 10));
+            return;
+          }
+        }, true);
 
         // Global Keyboard Handler (Escape, Left, Right)
         window.addEventListener('keydown', function(e) {
@@ -5369,9 +5478,9 @@
     </script>
 
     <!-- Scripts -->
-    <script src="form-integration.js?v=2.5"></script>
+    <script src="form-integration.js?v=4.0"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://unpkg.com/aos@2.3.1/dist/aos.js"></script>
-    <script src="app.js?v=2.5"></script>
+    <script src="app.js?v=4.0"></script>
   </body>
 </html>

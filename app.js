@@ -113,35 +113,76 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     }, 5000);
 
-    // ── 2. Gallery Sliding Track Carousel (Matching CarouselSection.jsx) ──
-    const galleryTrack = document.getElementById("gallery-slider-track");
-    const gallerySlides = document.querySelectorAll(".gallery-slide");
-    const galleryPrevBtn = document.getElementById("gallery-prev-btn");
-    const galleryNextBtn = document.getElementById("gallery-next-btn");
+    // ═══════════════════════════════════════════════════════════
+    //  INFINITE LOOP CAROUSEL ENGINE (Seamless Cloning + Teleport)
+    // ═══════════════════════════════════════════════════════════
+    function setupInfiniteCarousel(config) {
+      const track = document.getElementById(config.trackId);
+      if (!track) return null;
 
-    if (galleryTrack && gallerySlides.length > 0) {
-      let curGalleryIdx = 0;
-      const totalGallery = gallerySlides.length;
-      let galleryInterval;
+      if (track.dataset.infiniteInit === "true") return null;
+      track.dataset.infiniteInit = "true";
 
-      const updateGalleryView = (idx) => {
-        galleryTrack.style.transform = `translateX(calc(-${idx} * (var(--slide-w) + 16px)))`;
-        gallerySlides.forEach((slide, i) => {
-          const pb = slide.querySelector(".gallery-progress-bar");
-          const title = slide.querySelector(".gallery-slide-title");
+      const originalSlides = Array.from(track.querySelectorAll(config.slideSelector));
+      const total = originalSlides.length;
+      if (total <= 1) return null;
+
+      const CLONES = 3;
+
+      // Set data-real-idx on original slides
+      originalSlides.forEach((slide, idx) => {
+        slide.setAttribute("data-real-idx", idx);
+      });
+
+      // Prepend clones of the last CLONES slides
+      for (let i = total - CLONES; i < total; i++) {
+        const clone = originalSlides[i].cloneNode(true);
+        clone.classList.add("is-clone");
+        clone.setAttribute("data-real-idx", i);
+        track.insertBefore(clone, track.firstChild);
+      }
+
+      // Append clones of the first CLONES slides
+      for (let i = 0; i < CLONES; i++) {
+        const clone = originalSlides[i].cloneNode(true);
+        clone.classList.add("is-clone");
+        clone.setAttribute("data-real-idx", i);
+        track.appendChild(clone);
+      }
+
+      const allSlides = Array.from(track.querySelectorAll(config.slideSelector));
+      let curDomIdx = CLONES; // Start at real slide 0
+      let isAnimating = false;
+      let autoplayTimer = null;
+      const animDuration = 700; // ms
+
+      // Initial track position without transition
+      track.style.transition = "none";
+      track.style.transform = `translateX(calc(-${curDomIdx} * (var(--slide-w) + 16px)))`;
+      void track.offsetWidth; // Force reflow
+      track.style.transition = "";
+
+      const updateUI = (domIdx, animateProgress = true) => {
+        allSlides.forEach((slide, i) => {
+          const pb = slide.querySelector("." + config.progressBarClass);
+          const title = slide.querySelector("." + config.titleClass);
+
           if (pb) {
-            if (i === idx) {
+            if (i === domIdx) {
               pb.classList.remove("hidden");
-              pb.style.animation = "none";
-              // Trigger reflow
-              void pb.offsetWidth;
-              pb.style.animation = "galleryProgressLine 4s linear forwards";
+              if (animateProgress) {
+                pb.style.animation = "none";
+                void pb.offsetWidth;
+                pb.style.animation = `${config.progressAnimName} ${config.autoplayDelay || 4000}ms linear forwards`;
+              }
             } else {
               pb.classList.add("hidden");
+              pb.style.animation = "none";
             }
           }
+
           if (title) {
-            if (i === idx) {
+            if (i === domIdx) {
               title.style.opacity = "1";
               title.style.transform = "translateY(0)";
             } else {
@@ -152,107 +193,199 @@ document.addEventListener("DOMContentLoaded", () => {
         });
       };
 
-      const nextGallery = () => {
-        curGalleryIdx = (curGalleryIdx + 1) % totalGallery;
-        updateGalleryView(curGalleryIdx);
+      const moveTo = (targetDomIdx) => {
+        if (isAnimating) return;
+        isAnimating = true;
+        curDomIdx = targetDomIdx;
+        track.style.transition = `transform ${animDuration}ms cubic-bezier(0.25, 1, 0.5, 1)`;
+        track.style.transform = `translateX(calc(-${curDomIdx} * (var(--slide-w) + 16px)))`;
+        updateUI(curDomIdx, true);
+
+        // Safety fallback in case transitionend is delayed or missed
+        clearTimeout(track._safetyTimeout);
+        track._safetyTimeout = setTimeout(() => {
+          if (isAnimating) {
+            handleTransitionEnd();
+          }
+        }, animDuration + 60);
       };
 
-      const prevGallery = () => {
-        curGalleryIdx = (curGalleryIdx - 1 + totalGallery) % totalGallery;
-        updateGalleryView(curGalleryIdx);
+      const handleTransitionEnd = () => {
+        clearTimeout(track._safetyTimeout);
+        isAnimating = false;
+
+        // Passed last original slide into right clones -> teleport back to original counterpart
+        if (curDomIdx >= total + CLONES) {
+          track.style.transition = "none";
+          curDomIdx = curDomIdx - total;
+          track.style.transform = `translateX(calc(-${curDomIdx} * (var(--slide-w) + 16px)))`;
+          void track.offsetWidth;
+          updateUI(curDomIdx, false);
+          track.style.transition = "";
+        }
+        // Passed first original slide into left clones -> teleport forward to original counterpart
+        else if (curDomIdx < CLONES) {
+          track.style.transition = "none";
+          curDomIdx = curDomIdx + total;
+          track.style.transform = `translateX(calc(-${curDomIdx} * (var(--slide-w) + 16px)))`;
+          void track.offsetWidth;
+          updateUI(curDomIdx, false);
+          track.style.transition = "";
+        }
       };
 
-      if (galleryNextBtn) {
-        galleryNextBtn.addEventListener("click", () => {
-          nextGallery();
-          resetGalleryAutoplay();
+      track.addEventListener("transitionend", (e) => {
+        if (e.target === track && e.propertyName === "transform") {
+          handleTransitionEnd();
+        }
+      });
+
+      const nextSlide = () => {
+        if (isAnimating) return;
+        moveTo(curDomIdx + 1);
+      };
+
+      const prevSlide = () => {
+        if (isAnimating) return;
+        moveTo(curDomIdx - 1);
+      };
+
+      const startAutoplay = () => {
+        stopAutoplay();
+        autoplayTimer = setInterval(nextSlide, config.autoplayDelay || 4000);
+      };
+
+      const stopAutoplay = () => {
+        if (autoplayTimer) {
+          clearInterval(autoplayTimer);
+          autoplayTimer = null;
+        }
+      };
+
+      const resetAutoplay = () => {
+        stopAutoplay();
+        startAutoplay();
+      };
+
+      const prevBtn = document.getElementById(config.prevBtnId);
+      const nextBtn = document.getElementById(config.nextBtnId);
+
+      if (nextBtn) {
+        nextBtn.addEventListener("click", () => {
+          nextSlide();
+          resetAutoplay();
         });
       }
 
-      if (galleryPrevBtn) {
-        galleryPrevBtn.addEventListener("click", () => {
-          prevGallery();
-          resetGalleryAutoplay();
+      if (prevBtn) {
+        prevBtn.addEventListener("click", () => {
+          prevSlide();
+          resetAutoplay();
         });
       }
 
-      const resetGalleryAutoplay = () => {
-        clearInterval(galleryInterval);
-        galleryInterval = setInterval(nextGallery, 4000);
-      };
+      // Pause autoplay on mouse hover, resume on leave
+      track.addEventListener("mouseenter", stopAutoplay);
+      track.addEventListener("mouseleave", startAutoplay);
 
-      resetGalleryAutoplay();
-    }
+      // Touch / Swipe support for mobile
+      let touchStartX = 0;
+      let touchStartY = 0;
+      track.addEventListener("touchstart", (e) => {
+        if (e.touches && e.touches[0]) {
+          touchStartX = e.touches[0].clientX;
+          touchStartY = e.touches[0].clientY;
+          stopAutoplay();
+        }
+      }, { passive: true });
 
-    // ── 3. Amenities Sliding Track Carousel (Matching CarouselSection.jsx) ──
-    const amenitiesTrack = document.getElementById("amenities-slider-track");
-    const amenitiesSlides = document.querySelectorAll(".amenities-slide");
-    const amenitiesPrevBtn = document.getElementById("amenities-prev-btn");
-    const amenitiesNextBtn = document.getElementById("amenities-next-btn");
-
-    if (amenitiesTrack && amenitiesSlides.length > 0) {
-      let curAmenitiesIdx = 0;
-      const totalAmenities = amenitiesSlides.length;
-      let amenitiesInterval;
-
-      const updateAmenitiesView = (idx) => {
-        amenitiesTrack.style.transform = `translateX(calc(-${idx} * (var(--slide-w) + 16px)))`;
-        amenitiesSlides.forEach((slide, i) => {
-          const pb = slide.querySelector(".amenities-progress-bar");
-          const title = slide.querySelector(".amenities-slide-title");
-          if (pb) {
-            if (i === idx) {
-              pb.classList.remove("hidden");
-              pb.style.animation = "none";
-              void pb.offsetWidth;
-              pb.style.animation = "amenitiesProgressLine 4s linear forwards";
+      track.addEventListener("touchend", (e) => {
+        if (e.changedTouches && e.changedTouches[0]) {
+          const diffX = touchStartX - e.changedTouches[0].clientX;
+          const diffY = touchStartY - e.changedTouches[0].clientY;
+          if (Math.abs(diffX) > 40 && Math.abs(diffX) > Math.abs(diffY)) {
+            if (diffX > 0) {
+              nextSlide();
             } else {
-              pb.classList.add("hidden");
+              prevSlide();
             }
           }
-          if (title) {
-            if (i === idx) {
-              title.style.opacity = "1";
-              title.style.transform = "translateY(0)";
-            } else {
-              title.style.opacity = "0";
-              title.style.transform = "translateY(20px)";
-            }
+          startAutoplay();
+        }
+      }, { passive: true });
+
+      // Attach click to open lightbox for all slides (including clones)
+      allSlides.forEach((slide) => {
+        slide.style.cursor = "pointer";
+        let idx = slide.getAttribute("data-real-idx");
+        if (idx === null || isNaN(parseInt(idx, 10))) {
+          const match = (slide.getAttribute("onclick") || "").match(/\d+/);
+          idx = match ? match[0] : "0";
+        }
+        const parsedIdx = parseInt(idx, 10);
+        slide.onclick = function(e) {
+          if (config.onSlideClick) {
+            config.onSlideClick(parsedIdx);
           }
-        });
-      };
+        };
+      });
 
-      const nextAmenities = () => {
-        curAmenitiesIdx = (curAmenitiesIdx + 1) % totalAmenities;
-        updateAmenitiesView(curAmenitiesIdx);
-      };
+      // Track-level click delegation (Guarantees desktop clicks anywhere inside slide/image/overlay fire)
+      track.addEventListener("click", function(e) {
+        if (e.target.closest("button, .gallery-nav-btn, .amenities-nav-btn")) return;
+        const slide = e.target.closest(config.slideSelector);
+        if (slide) {
+          let idx = slide.getAttribute("data-real-idx");
+          if (idx === null || isNaN(parseInt(idx, 10))) {
+            const match = (slide.getAttribute("onclick") || "").match(/\d+/);
+            idx = match ? match[0] : "0";
+          }
+          if (config.onSlideClick) {
+            config.onSlideClick(parseInt(idx, 10));
+          }
+        }
+      });
 
-      const prevAmenities = () => {
-        curAmenitiesIdx = (curAmenitiesIdx - 1 + totalAmenities) % totalAmenities;
-        updateAmenitiesView(curAmenitiesIdx);
-      };
+      // Initial UI activation
+      updateUI(curDomIdx, true);
+      startAutoplay();
 
-      if (amenitiesNextBtn) {
-        amenitiesNextBtn.addEventListener("click", () => {
-          nextAmenities();
-          resetAmenitiesAutoplay();
-        });
-      }
-
-      if (amenitiesPrevBtn) {
-        amenitiesPrevBtn.addEventListener("click", () => {
-          prevAmenities();
-          resetAmenitiesAutoplay();
-        });
-      }
-
-      const resetAmenitiesAutoplay = () => {
-        clearInterval(amenitiesInterval);
-        amenitiesInterval = setInterval(nextAmenities, 4000);
-      };
-
-      resetAmenitiesAutoplay();
+      return { nextSlide, prevSlide, stopAutoplay, startAutoplay };
     }
+
+    // ── 2. Gallery Infinite Carousel ──
+    setupInfiniteCarousel({
+      trackId: "gallery-slider-track",
+      slideSelector: ".gallery-slide",
+      prevBtnId: "gallery-prev-btn",
+      nextBtnId: "gallery-next-btn",
+      progressBarClass: "gallery-progress-bar",
+      progressAnimName: "galleryProgressLine",
+      titleClass: "gallery-slide-title",
+      autoplayDelay: 4000,
+      onSlideClick: function(idx) {
+        if (typeof window.openGalleryLightbox === "function") {
+          window.openGalleryLightbox(idx);
+        }
+      }
+    });
+
+    // ── 3. Amenities Infinite Carousel ──
+    setupInfiniteCarousel({
+      trackId: "amenities-slider-track",
+      slideSelector: ".amenities-slide",
+      prevBtnId: "amenities-prev-btn",
+      nextBtnId: "amenities-next-btn",
+      progressBarClass: "amenities-progress-bar",
+      progressAnimName: "amenitiesProgressLine",
+      titleClass: "amenities-slide-title",
+      autoplayDelay: 4000,
+      onSlideClick: function(idx) {
+        if (typeof window.openAmenitiesLightbox === "function") {
+          window.openAmenitiesLightbox(idx);
+        }
+      }
+    });
 
     // ── 4. Header Smart Scroll Behavior (Matching heera/Navbar.jsx) ──
     const mainNav = document.getElementById("mainNavbar");
@@ -453,17 +586,29 @@ window.toggleFloorPlan = function(tab) {
 
 // ── Global Lightbox Handlers: Gallery ──
 window.openGalleryLightbox = function(idx) {
-  curGalleryLightboxIdx = idx;
+  let index = 0;
+  if (typeof idx === 'number' && !isNaN(idx)) {
+    index = idx;
+  } else if (typeof idx === 'string' && !isNaN(parseInt(idx, 10))) {
+    index = parseInt(idx, 10);
+  } else if (typeof curGalleryLightboxIdx === 'number' && !isNaN(curGalleryLightboxIdx)) {
+    index = curGalleryLightboxIdx;
+  }
+  const total = galleryData.length;
+  index = Math.max(0, Math.min(index, total - 1));
+  curGalleryLightboxIdx = index;
+
   const lb = document.getElementById("gallery-lightbox");
   const img = document.getElementById("gallery-lightbox-img");
   const cap = document.getElementById("gallery-lightbox-caption");
   const counter = document.getElementById("gallery-counter");
-  if (lb && img && galleryData[idx]) {
-    img.src = galleryData[idx].src;
-    if (cap) cap.textContent = galleryData[idx].title;
-    if (counter) counter.textContent = `${idx + 1} / ${galleryData.length}`;
+  if (lb && img && galleryData[index]) {
+    img.src = galleryData[index].src;
+    if (cap) cap.textContent = galleryData[index].title;
+    if (counter) counter.textContent = `${index + 1} / ${total}`;
     lb.classList.remove("hidden");
     lb.classList.add("is-open", "flex");
+    lb.style.display = "flex";
     document.body.style.overflow = "hidden";
   }
 };
@@ -473,6 +618,7 @@ window.closeGalleryLightbox = function() {
   if (lb) {
     lb.classList.remove("is-open", "flex");
     lb.classList.add("hidden");
+    lb.style.display = "none";
     document.body.style.overflow = "";
   }
 };
@@ -491,17 +637,29 @@ window.prevGalleryLightbox = function(e) {
 
 // ── Global Lightbox Handlers: Amenities ──
 window.openAmenitiesLightbox = function(idx) {
-  curAmenitiesLightboxIdx = idx;
+  let index = 0;
+  if (typeof idx === 'number' && !isNaN(idx)) {
+    index = idx;
+  } else if (typeof idx === 'string' && !isNaN(parseInt(idx, 10))) {
+    index = parseInt(idx, 10);
+  } else if (typeof curAmenitiesLightboxIdx === 'number' && !isNaN(curAmenitiesLightboxIdx)) {
+    index = curAmenitiesLightboxIdx;
+  }
+  const total = amenitiesData.length;
+  index = Math.max(0, Math.min(index, total - 1));
+  curAmenitiesLightboxIdx = index;
+
   const lb = document.getElementById("amenities-lightbox");
   const img = document.getElementById("amenities-lightbox-img");
   const cap = document.getElementById("amenities-lightbox-caption");
   const counter = document.getElementById("amenities-counter");
-  if (lb && img && amenitiesData[idx]) {
-    img.src = amenitiesData[idx].src;
-    if (cap) cap.textContent = amenitiesData[idx].title;
-    if (counter) counter.textContent = `${idx + 1} / ${amenitiesData.length}`;
+  if (lb && img && amenitiesData[index]) {
+    img.src = amenitiesData[index].src;
+    if (cap) cap.textContent = amenitiesData[index].title;
+    if (counter) counter.textContent = `${index + 1} / ${total}`;
     lb.classList.remove("hidden");
     lb.classList.add("is-open", "flex");
+    lb.style.display = "flex";
     document.body.style.overflow = "hidden";
   }
 };
@@ -511,6 +669,7 @@ window.closeAmenitiesLightbox = function() {
   if (lb) {
     lb.classList.remove("is-open", "flex");
     lb.classList.add("hidden");
+    lb.style.display = "none";
     document.body.style.overflow = "";
   }
 };
