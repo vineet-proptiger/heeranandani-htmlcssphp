@@ -1,0 +1,221 @@
+<!-- Lead Capture Popup Modal matching heera/EnquireModal.jsx, heera/LeadForm.jsx, and media_1791807148467_c9066566.png -->
+<div 
+  class="modal fade" 
+  id="leadModal" 
+  tabindex="-1" 
+  aria-hidden="true" 
+  style="background: rgba(0, 0, 0, 0.75); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);"
+>
+  <div class="modal-dialog modal-dialog-centered" style="max-width: 440px; margin: 1.75rem auto;">
+    <div
+      class="modal-content relative overflow-hidden shadow-2xl"
+      style="
+        background: radial-gradient(circle at center, #0a1033 0%, #000215 100%);
+        border: 1px solid #c9a65a;
+        border-radius: 24px;
+        padding: 36px 32px 32px;
+        box-shadow: 0 0 40px rgba(0, 0, 0, 0.6);
+        color: #ffffff;
+        font-family: 'Open Sans', var(--font-sans), sans-serif;
+      "
+    >
+      <!-- Close Button -->
+      <button
+        type="button"
+        data-bs-dismiss="modal"
+        aria-label="Close"
+        style="
+          position: absolute;
+          top: 16px;
+          right: 16px;
+          width: 28px;
+          height: 28px;
+          border-radius: 50%;
+          background: #c9a65a;
+          color: #000000;
+          border: none;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          transition: transform 0.2s, background-color 0.2s;
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+          z-index: 20;
+          padding: 0;
+        "
+        onmouseenter="this.style.transform='scale(1.1)';"
+        onmouseleave="this.style.transform='scale(1)';"
+      >
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#000000" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+      </button>
+
+      <!-- Modal Header -->
+      <div style="text-align: center; margin-bottom: 24px;">
+        <h3
+          style="
+            color: #c9a65a;
+            font-family: var(--font-jost), 'Montserrat', sans-serif;
+            font-size: 24px;  
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin: 0 0 6px 0;
+            line-height: 1.2;
+          "
+        >
+          ENQUIRE NOW
+        </h3>
+        <p
+          style="
+            color: #ffffff;
+            font-size: 13.5px;
+            margin: 0;
+            font-weight: 400;
+            letter-spacing: 0.01em;
+          "
+        >
+          Please enter your details to know more
+        </p>
+      </div>
+
+      <!-- Lead Capture Form -->
+      <form
+        id="modalForm"
+        class="rs-lead-form needs-validation"
+        method="POST"
+        action="/submit-lead"
+        data-endpoint="/submit-lead"
+        novalidate
+        onsubmit="return window.RSLeadSubmit ? RSLeadSubmit(this, event) : true;"
+        style="
+          background: transparent !important;
+          background-color: transparent !important;
+          box-shadow: none !important;
+          border: none !important;
+          padding: 0 !important;
+          margin: 0 !important;
+          max-width: 100% !important;
+          width: 100% !important;
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+        "
+      >
+        <style>
+          #modalForm .modal-input-field {
+            width: 100% !important;
+            padding: 13px 16px !important;
+            background: transparent !important;
+            background-color: transparent !important;
+            color: #ffffff !important;
+            border: 1px solid rgba(201, 166, 90, 0.4) !important;
+            border-radius: 6px !important;
+            outline: none !important;
+            font-size: 14px !important;
+            font-family: 'Open Sans', var(--font-sans), sans-serif !important;
+            transition: border-color 0.25s, box-shadow 0.25s !important;
+            box-sizing: border-box !important;
+            box-shadow: none !important;
+          }
+          #modalForm .modal-input-field:focus {
+            border-color: #c9a65a !important;
+            box-shadow: 0 0 0 2px rgba(201, 166, 90, 0.25) !important;
+          }
+          #modalForm .modal-input-field::placeholder {
+            color: #9ca3af !important;
+          }
+
+          #modalForm .modal-submit-pill-btn {
+            background-color: #c9a65a !important;
+            color: #111111 !important;
+            padding: 12px 24px !important;
+            width: 180px !important;
+            margin: 18px auto 0 !important;
+            border-radius: 50px !important;
+            font-size: 14px !important;
+            font-weight: 700 !important;
+            text-transform: uppercase !important;
+            letter-spacing: 0.06em !important;
+            font-family: var(--font-jost), 'Montserrat', sans-serif !important;
+            border: none !important;
+            cursor: pointer !important;
+            display: block !important;
+            transition: transform 0.2s, background-color 0.2s, box-shadow 0.2s !important;
+            box-shadow: 0 4px 14px rgba(201, 166, 90, 0.3) !important;
+          }
+          #modalForm .modal-submit-pill-btn:hover {
+            transform: scale(1.05) !important;
+            background-color: #d8b872 !important;
+          }
+        </style>
+
+        <!-- First Name -->
+        <div>
+          <input
+            type="text"
+            name="fullname"
+            required
+            placeholder="First Name"
+            class="modal-input-field"
+          />
+        </div>
+
+        <!-- Email Id (optional) -->
+        <div>
+          <input
+            type="email"
+            name="email"
+            placeholder="Email Id (optional)"
+            class="modal-input-field"
+          />
+        </div>
+
+        <!-- Phone Number -->
+        <div>
+          <input
+            type="tel"
+            name="phone"
+            required
+            placeholder="Phone Number"
+            maxlength="10"
+            pattern="^[6-9][0-9]{9}$"
+            class="modal-input-field"
+          />
+        </div>
+
+        <div class="small text-white text-center" data-form-message></div>
+
+        <!-- Centered Submit Pill Button -->
+        <button
+          type="submit"
+          class="modal-submit-pill-btn"
+        >
+          SUBMIT
+        </button>
+
+        <!-- Hidden Tracking Fields -->
+        <input type="hidden" name="form_name" value="Popup Modal" />
+        <input type="hidden" name="country" value="india" />
+        <input type="hidden" name="utm_source" />
+        <input type="hidden" name="utm_medium" />
+        <input type="hidden" name="utm_campaign" />
+        <input type="hidden" name="utm_term" />
+        <input type="hidden" name="utm_content" />
+        <input type="hidden" name="gclid" />
+        <input type="hidden" name="gbraid" />
+        <input type="hidden" name="wbraid" /> 
+        <input type="hidden" name="fbclid" />
+        <input type="hidden" name="device" />
+        <input type="hidden" name="referrer" />
+        <input type="hidden" name="Ipaddress" />
+        <input type="hidden" name="landing_page" />
+        <input type="hidden" name="projectId" />
+        <input type="hidden" name="city" />
+        <input type="hidden" name="projectName" />
+      </form>
+    </div>
+  </div>
+</div>
