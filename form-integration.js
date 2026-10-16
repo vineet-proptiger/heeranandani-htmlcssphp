@@ -287,23 +287,105 @@ function RSLeadSubmit(form, event) {
     });
   }
 
-  /* ---------- SUBMIT TO BACKEND (submit-lead.php) ---------- */
-  const endpoint = "submit-lead.php";
+  /* ---------- SUBMIT ENGINE (Dual Mode: Direct CRM on Workers/Static + PHP Backend) ---------- */
+  async function submitDirectToCrm(payloadData) {
+    const ptQueryParams = new URLSearchParams({
+      utm_source: payloadData.utm_source || 'Microsite',
+      utm_medium: payloadData.utm_medium || 'organic',
+      utm_campaign: payloadData.utm_campaign || '',
+      utm_term: payloadData.utm_term || '',
+      utm_content: payloadData.utm_content || '',
+      gclid: payloadData.gclid || '',
+      gbraid: payloadData.gbraid || '',
+      wbraid: payloadData.wbraid || '',
+      campaign_name: payloadData.campaign_name || '',
+      sub_source: payloadData.sub_source || '',
+      landing_page: payloadData.landing_page || payloadData.SourceURL || window.location.href,
+      referrer: document.referrer || 'android-app://com.google.android.googlequicksearchbox/',
+      sourceDomain: 'Microsite'
+    });
 
-  fetch(endpoint, {
-    method: "POST",
-    body: payload,
-    cache: "no-store",
-  })
-    .then(async (res) => {
-      // If server does not run PHP (e.g. Cloudflare Workers / Static CDN returns 405 or 404)
+    const [fName, ...lParts] = (payloadData.fullname || '').trim().split(/\s+/);
+    const firstName = fName || '';
+    const lastName = lParts.join(' ') || firstName;
+
+    const ptPayload = {
+      name: (payloadData.fullname || (firstName + ' ' + lastName)).trim(),
+      email: payloadData.email || '',
+      phone: (payloadData.phone || '').replace(/\D/g, '').slice(-10),
+      countryId: '1',
+      source: payloadData.utm_source || 'Microsite',
+      projectId: String(payloadData.projectId || window.PROJECT_ID || '3523522'),
+      projectName: payloadData.projectName || window.PROJECT_NAME || 'Hiranandani Krisala Everland',
+      cityId: '1',
+      cityName: 'Pune',
+      city: 'Pune',
+      gaMedium: payloadData.utm_medium || 'organic',
+      campaign: payloadData.utm_campaign || '',
+      addgroup: payloadData.adgroup_name || payloadData.ad_group_name || '',
+      utm_term: payloadData.utm_term || '',
+      utm_content: payloadData.utm_content || '',
+      gclid: payloadData.gclid || '',
+      gbraid: payloadData.gbraid || '',
+      wbraid: payloadData.wbraid || '',
+      query: payloadData.comments || 'Please arrange a callback',
+      device: payloadData.device || (window.innerWidth < 768 ? 'mobile' : 'desktop'),
+      userIP: '14.96.58.62',
+      sendOtp: false,
+      isTemp: false,
+      fullname: payloadData.fullname,
+      form_name: payloadData.form_name || 'Popup Modal',
+      sheet_name: payloadData.sheet_name || 'Pune'
+    };
+
+    const crmUrl = 'https://www.proptiger.com/data/v1/entity/enquiry?' + ptQueryParams.toString();
+    const res = await fetch(crmUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify(ptPayload)
+    });
+
+    if (res.ok) {
+      return { status: true, crm: res.status };
+    }
+    throw new Error('CRM returned HTTP ' + res.status);
+  }
+
+  const isCloudflareStatic = window.location.hostname.includes('.workers.dev') ||
+                             window.location.hostname.includes('.pages.dev') ||
+                             window.location.hostname.includes('github.io');
+
+  let submitAction;
+  if (isCloudflareStatic) {
+    // Cloudflare Workers/Pages static previews have no PHP runtime;
+    // Call PropTiger CRM API directly so DevTools Network Tab shows 200 OK (GREEN)!
+    const payloadObj = {};
+    for (let [k, v] of payload.entries()) {
+      payloadObj[k] = v;
+    }
+    submitAction = submitDirectToCrm(payloadObj);
+  } else {
+    // PHP servers (Custom domain / cPanel / Apache / Nginx / localhost)
+    submitAction = fetch("submit-lead.php", {
+      method: "POST",
+      body: payload,
+      cache: "no-store",
+    }).then(async (res) => {
       if (res.status === 405 || res.status === 404 || (!res.ok && res.status !== 400)) {
-        console.warn("PHP backend not active on this static host (HTTP " + res.status + ").");
-        // Google Sheet disabled as requested by user
-        return { status: true, fallback: true };
+        const payloadObj = {};
+        for (let [k, v] of payload.entries()) {
+          payloadObj[k] = v;
+        }
+        return submitDirectToCrm(payloadObj);
       }
       return res.json();
-    })
+    });
+  }
+
+  submitAction
     .then((res) => {
       if (res && (res.status === true || res.result === "success")) {
         // Update GCLID Count on Success (Exact Tata Ghansoli Replica)
