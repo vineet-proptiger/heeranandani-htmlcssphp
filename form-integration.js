@@ -49,7 +49,9 @@ window.autoPopulateTrackingForms = function () {
   document.querySelectorAll("form.rs-lead-form").forEach((form) => {
     fields.forEach((name) => {
       const input = form.querySelector(`[name="${name}"]`);
-      const val = params.get(name) || cookieTracking[name] || '';
+      // Preserve first-touch values from the cookie if the visitor later lands
+      // with a different campaign URL before submitting the form.
+      const val = cookieTracking[name] || params.get(name) || '';
       if (input && val) {
         input.value = val;
       }

@@ -19,7 +19,7 @@ window.setTrackingCookie = function(name, value, days) {
     date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
     expires = "; expires=" + date.toUTCString();
   }
-  document.cookie = name + "=" + (value || "")  + expires + "; path=/";
+  document.cookie = name + "=" + (value || "")  + expires + "; path=/; SameSite=Lax";
 }
 
 window.getTrackingCookie = function(name) {
@@ -125,6 +125,17 @@ window.hasTrackingParams = function() {
   return false;
 }
 
+// Accept only a real HTTP(S) page URL with a hostname before saving attribution.
+window.hasValidTrackingDomain = function() {
+  if (typeof window === 'undefined' || !window.location) return false;
+  try {
+    const url = new URL(window.location.href);
+    return (url.protocol === 'http:' || url.protocol === 'https:') && !!url.hostname;
+  } catch (e) {
+    return false;
+  }
+}
+
 // Helper to check for test/debug mode (test=submit, test=true, debug=test across query & hash)
 window.isTestMode = function() {
   if (typeof window === 'undefined') return false;
@@ -133,16 +144,29 @@ window.isTestMode = function() {
   return testVal.toLowerCase() === 'submit' || testVal.toLowerCase() === 'true' || debugVal.toLowerCase() === 'test';
 }
 
-// Immediately parse and save parameters when the page loads:
-// 1. Single domain (direct visits without ad/UTM tags) par cookie save nahi hogi.
-// 2. test=submit ya debug=test aane par bhi cookie save nahi hogi taaki testing unaffected rahe.
+// Save the first valid tracked landing URL for one day. Plain domain visits
+// without campaign identifiers and test/debug URLs never create or replace it.
 if (typeof window !== 'undefined' && typeof document !== 'undefined') {
   const existingCookie = window.getTrackingCookie('rs_lead_tracking_data');
-  
-  if (!existingCookie && window.hasTrackingParams() && !window.isTestMode()) {
+
+  if (window.hasValidTrackingDomain() && window.hasTrackingParams() && !window.isTestMode()) {
     const trackingData = window.collectTrackingData();
-    // Save to cookie for 1 day
-    window.setTrackingCookie('rs_lead_tracking_data', encodeURIComponent(JSON.stringify(trackingData)), 1); 
+    const currentDomain = window.location.hostname.toLowerCase();
+    trackingData.tracking_domain = currentDomain;
+
+    let existingData = null;
+    if (existingCookie) {
+      try { existingData = JSON.parse(decodeURIComponent(existingCookie)); } catch (e) {}
+    }
+
+    // A valid, unexpired cookie from this domain is the first-touch record.
+    // Older cookies without tracking_domain are host-only cookies too, so keep them.
+    const savedDomain = existingData && existingData.tracking_domain
+      ? String(existingData.tracking_domain).toLowerCase()
+      : currentDomain;
+    if (!existingData || savedDomain !== currentDomain) {
+      window.setTrackingCookie('rs_lead_tracking_data', encodeURIComponent(JSON.stringify(trackingData)), 1);
+    }
   }
 }
 
@@ -160,8 +184,13 @@ window.buildTrackingFields = function () {
       finalTrackingData = window.collectTrackingData(); // fallback
     }
   } else {
-    // Fallback if cookie was missing or blocked
+    // Fallback if cookie was missing or blocked.
     finalTrackingData = window.collectTrackingData();
+    // Do not attribute a test/debug or invalid-domain submission to its URL.
+    if (window.isTestMode() || !window.hasValidTrackingDomain()) {
+      finalTrackingData.SourceURL = '';
+      finalTrackingData.landing_page = '';
+    }
   }
 
   // Update dynamic values (like the current page where form is being submitted)
