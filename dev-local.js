@@ -2,7 +2,7 @@
    DEV & LOCAL TESTING HELPER (Optional File)
    ---------------------------------------------------------------
    NOTE: This file is ONLY used for local / offline test environments
-   (e.g., Live Server, localhost, 127.0.0.1, .pages.dev preview).
+   (e.g., Live Server, localhost, 127.0.0.1).
    
    If you DELETE this file, the main website and production code
    will continue to function normally with zero issues.
@@ -12,9 +12,7 @@
   const isLocalHost =
     typeof window !== "undefined" &&
     (window.location.hostname === "localhost" ||
-      window.location.hostname === "127.0.0.1" ||
-      window.location.hostname.includes(".pages.dev") ||
-      window.location.hostname.includes(".workers.dev"));
+      window.location.hostname === "127.0.0.1");
 
   if (isLocalHost) {
     window.DEV_LOCAL_CONFIG = {
@@ -24,10 +22,8 @@
       // 2. Referrer fallback for direct localhost browser address-bar pastes
       defaultReferrer: "android-app://com.google.android.googlequicksearchbox/",
 
-      // 3. Rate limiter bypass for repeated local testing
+      // 3. Local testing only: bypass GCLID limiter and map localhost for CRM validation
       bypassRateLimiter: true,
-
-      // 4. Map localhost origin to production BASE_URL for CRM validation
       rewriteLocalhostDomain: true,
     };
 

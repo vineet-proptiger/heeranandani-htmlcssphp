@@ -201,62 +201,92 @@ function RSLeadSubmit(form, event) {
   /* ---------- PREPARE TRACKING DATA ---------- */
   const trackingData = window.buildTrackingFields(form);
 
-  /* ---------- GCLID-SPECIFIC BROWSER LIMIT (Max 3 submissions per GCLID / 30 days) ---------- */
+  /* ---------- GCLID-SPECIFIC BROWSER LIMIT (Max 3 successful submissions per GCLID / 30 days) ---------- */
   const gclid = trackingData.gclid || '';
   let currentCount = 0;
+  const gclidWindowMs = 30 * 24 * 60 * 60 * 1000;
+  let gclidWindowStart = Date.now();
+  form._gclid = '';
+  form._currentCount = 0;
+  form._gclidWindowStart = 0;
 
   if (gclid) {
-    const safeGclid = gclid;
-    const cookieRegex = new RegExp(`(?:^|; )lead_trk_${window.PROJECT_ID}_${safeGclid}=([^;]*)`);
-    const cookieMatch = document.cookie.match(cookieRegex);
-    const cookieCount = cookieMatch ? parseInt(cookieMatch[1], 10) : 0;
-
-    let lsCount = 0;
-    const lsKey = `lead_trk_data_${window.PROJECT_ID}`;
-    const lsDataStr = localStorage.getItem(lsKey);
-    let lsData = {};
-
-    if (lsDataStr) {
+    const projectId = window.PROJECT_ID || '';
+    const counterCookieName = `lead_trk_${projectId}_${encodeURIComponent(gclid)}`;
+    const lsKey = `lead_trk_data_${projectId}`;
+    const now = Date.now();
+    let cookieRecord = null;
+    const cookieValue = window.getTrackingCookie
+      ? window.getTrackingCookie(counterCookieName)
+      : null;
+    if (cookieValue) {
       try {
-        lsData = JSON.parse(lsDataStr);
-        const gclidRecord = lsData[gclid];
-
-        if (gclidRecord) {
-          if (Date.now() - gclidRecord.firstSeen < 2592000000) { // 30 days
-            lsCount = gclidRecord.count || 0;
-          } else {
-            delete lsData[gclid];
-            localStorage.setItem(lsKey, JSON.stringify(lsData));
+        const parsed = JSON.parse(decodeURIComponent(cookieValue));
+        if (parsed && typeof parsed === 'object') {
+          cookieRecord = parsed;
+          if (!(Number(cookieRecord.firstSeen) > 0)) {
+            cookieRecord.firstSeen = now;
+            cookieRecord.legacy = true;
           }
+        } else if (Number.isFinite(parsed) && parsed > 0) {
+          cookieRecord = { count: parsed, firstSeen: now, legacy: true };
         }
-      } catch (e) {}
+      } catch (e) {
+        // Older versions stored only an integer count in this cookie.
+        const legacyCount = parseInt(cookieValue, 10);
+        if (!Number.isNaN(legacyCount)) cookieRecord = { count: legacyCount, firstSeen: now, legacy: true };
+      }
     }
 
-    currentCount = Math.max(cookieCount, lsCount);
+    let lsData = {};
+    try {
+      const lsDataStr = localStorage.getItem(lsKey);
+      if (lsDataStr) {
+        const parsed = JSON.parse(lsDataStr);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) lsData = parsed;
+      }
+    } catch (e) {
+      lsData = {};
+    }
 
-    // Optional helper to reset counter for testing via URL param (?reset_limit=1)
-    const urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.get('reset_limit') === '1') {
-      currentCount = 0;
-      delete lsData[gclid];
-      localStorage.setItem(lsKey, JSON.stringify(lsData));
-      document.cookie = `lead_trk_${window.PROJECT_ID}_${safeGclid}=0; max-age=0; path=/`;
+    const storedRecord = lsData && lsData[gclid];
+    const validRecords = [cookieRecord, storedRecord].filter((record) =>
+      record && Number(record.firstSeen) > 0 && now >= Number(record.firstSeen) && now - Number(record.firstSeen) < gclidWindowMs
+    );
+    if (validRecords.length) {
+      const currentRecord = validRecords.sort((a, b) =>
+        (parseInt(b.count, 10) || 0) - (parseInt(a.count, 10) || 0) ||
+        Number(a.firstSeen) - Number(b.firstSeen)
+      )[0];
+      currentCount = parseInt(currentRecord.count, 10) || 0;
+      gclidWindowStart = Number(currentRecord.firstSeen);
+    } else if (cookieRecord && cookieRecord.legacy && parseInt(cookieRecord.count, 10) > 0) {
+      // Keep a legacy count for one fresh window while migrating old cookies.
+      currentCount = parseInt(cookieRecord.count, 10);
+    } else {
+      gclidWindowStart = now;
     }
 
     const devCfg = (typeof window !== 'undefined' && window.DEV_LOCAL_CONFIG) || {};
-    const isTestingHost = Boolean(devCfg.bypassRateLimiter || (typeof window.isTestMode === 'function' && window.isTestMode()));
+    const isLocalLimiterBypass = Boolean(devCfg.bypassRateLimiter);
 
-    if (!isTestingHost && currentCount >= 3) {
-      // Simulate fake success response without sending fetch (Max 3 submissions reached in production)
-      setTimeout(() => {
-        showThankYouScreen(form);
-      }, 500);
+    if (!isLocalLimiterBypass && currentCount >= 3) {
+      msgBox.innerHTML = `
+        <div class="alert alert-warning mt-3" role="alert">
+          This ad click has reached its submission limit. Please contact us by phone for assistance.
+        </div>
+      `;
+      btn.disabled = false;
+      btn.innerHTML = originalBtnContent || "SUBMIT";
       return false;
     }
 
-    // Pass data forward to update count on successful API response
-    form._gclid = gclid;
-    form._currentCount = currentCount;
+    // Only explicit localhost development bypass skips counter writes.
+    if (!isLocalLimiterBypass) {
+      form._gclid = gclid;
+      form._currentCount = currentCount;
+      form._gclidWindowStart = gclidWindowStart;
+    }
   }
 
   /* ---------- PREPARE FORM PAYLOAD (Exact Next.js Replica) ---------- */
@@ -437,23 +467,29 @@ function RSLeadSubmit(form, event) {
         const prjId = window.PROJECT_ID || '';
         if (form._gclid && prjId) {
           const newCount = form._currentCount + 1;
-          document.cookie = `lead_trk_${prjId}_${form._gclid}=${newCount}; max-age=2592000; path=/`;
-
+          const counterCookieName = `lead_trk_${prjId}_${encodeURIComponent(form._gclid)}`;
           const lsKey = `lead_trk_data_${window.PROJECT_ID}`;
           let lsData = {};
           try {
             const existing = localStorage.getItem(lsKey);
-            if (existing) lsData = JSON.parse(existing);
+            if (existing) {
+              const parsed = JSON.parse(existing);
+              if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) lsData = parsed;
+            }
           } catch (e) {}
 
+          const windowStart = form._gclidWindowStart || Date.now();
+          const counterRecord = { count: newCount, firstSeen: windowStart };
           lsData[form._gclid] = {
             count: newCount,
-            firstSeen:
-              lsData[form._gclid] && lsData[form._gclid].firstSeen
-                ? lsData[form._gclid].firstSeen
-                : Date.now(),
+            firstSeen: windowStart,
           };
           try { localStorage.setItem(lsKey, JSON.stringify(lsData)); } catch (e) {}
+
+          // Expire cookie and localStorage count at the same 30-day boundary.
+          const remainingSeconds = Math.max(0, Math.floor((windowStart + 30 * 24 * 60 * 60 * 1000 - Date.now()) / 1000));
+          const encodedRecord = encodeURIComponent(JSON.stringify(counterRecord));
+          document.cookie = `${counterCookieName}=${encodedRecord}; max-age=${remainingSeconds}; path=/; SameSite=Lax`;
         }
 
         window.dataLayer = window.dataLayer || [];

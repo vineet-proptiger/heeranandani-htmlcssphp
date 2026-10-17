@@ -144,12 +144,19 @@ window.isTestMode = function() {
   return testVal.toLowerCase() === 'submit' || testVal.toLowerCase() === 'true' || debugVal.toLowerCase() === 'test';
 }
 
-// Save the first valid tracked landing URL for one day. Plain domain visits
-// without campaign identifiers and test/debug URLs never create or replace it.
+// Save the first valid tracked landing URL for one day (Google Ads GCLID/GBRAID/WBRAID, Meta FBCLID, and UTMs).
+// Plain domain visits without campaign identifiers and test/debug URLs never create or replace it.
 if (typeof window !== 'undefined' && typeof document !== 'undefined') {
   const existingCookie = window.getTrackingCookie('rs_lead_tracking_data');
+  const hasAdTracking = Boolean(
+    window.getParam('gclid') ||
+    window.getParam('fbclid') ||
+    window.getParam('gbraid') ||
+    window.getParam('wbraid') ||
+    (typeof window.hasTrackingParams === 'function' && window.hasTrackingParams())
+  );
 
-  if (window.hasValidTrackingDomain() && window.hasTrackingParams() && !window.isTestMode()) {
+  if (window.hasValidTrackingDomain() && hasAdTracking && !window.isTestMode()) {
     const trackingData = window.collectTrackingData();
     const currentDomain = window.location.hostname.toLowerCase();
     trackingData.tracking_domain = currentDomain;
