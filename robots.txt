@@ -1,6 +1,4 @@
 User-agent: *
 Allow: /
-Disallow: /proptiger.log
-Disallow: /submit-lead.php
 
 Sitemap: https://hiranandanihinjewadiphase3.in/sitemap.xml

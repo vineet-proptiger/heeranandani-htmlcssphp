@@ -243,11 +243,8 @@ function RSLeadSubmit(form, event) {
       document.cookie = `lead_trk_${window.PROJECT_ID}_${safeGclid}=0; max-age=0; path=/`;
     }
 
-    const isTestingHost = window.location.hostname.includes('.workers.dev') ||
-                          window.location.hostname.includes('.pages.dev') ||
-                          window.location.hostname.includes('localhost') ||
-                          window.location.hostname.includes('127.0.0.1') ||
-                          (typeof window.isTestMode === 'function' && window.isTestMode());
+    const devCfg = (typeof window !== 'undefined' && window.DEV_LOCAL_CONFIG) || {};
+    const isTestingHost = Boolean(devCfg.bypassRateLimiter || (typeof window.isTestMode === 'function' && window.isTestMode()));
 
     if (!isTestingHost && currentCount >= 3) {
       // Simulate fake success response without sending fetch (Max 3 submissions reached in production)
@@ -263,11 +260,11 @@ function RSLeadSubmit(form, event) {
   }
 
   /* ---------- PREPARE FORM PAYLOAD (Exact Next.js Replica) ---------- */
-  const pId = window.PROJECT_ID || '3523522';
-  const pName = window.PROJECT_NAME || 'Hiranandani Krisala Everland';
-  const sName = window.SHEET_NAME || 'Pune';
-  const secKey = window.SECRET_KEY || '6c7f9ad8b2a1e0f4d5a8c0b9f6e2a4d190';
-  const pCity = window.CITY_DISPLAY || window.CITY_SLUG || 'Pune';
+  const pId = window.PROJECT_ID || '';
+  const pName = window.PROJECT_NAME || '';
+  const sName = window.SHEET_NAME || '';
+  const secKey = window.SECRET_KEY || '';
+  const pCity = window.CITY_DISPLAY || window.CITY_SLUG || '';
 
   const payload = new FormData();
   payload.append('fullname', name.value.trim());
@@ -293,8 +290,20 @@ function RSLeadSubmit(form, event) {
     });
   }
 
-  /* ---------- SUBMIT ENGINE (Dual Mode: Direct CRM on Workers/Static + PHP Backend) ---------- */
+  /* ---------- SUBMIT ENGINE (Dual Mode: Direct CRM on Workers/Static + Webhook) ---------- */
   async function submitDirectToCrm(payloadData) {
+    const devCfg = (typeof window !== 'undefined' && window.DEV_LOCAL_CONFIG) || {};
+    const prodDomain = window.BASE_URL || (typeof window !== 'undefined' ? window.location.origin : '');
+    let cleanLandingPage = payloadData.landing_page || payloadData.SourceURL || (typeof window !== 'undefined' ? window.location.href : '');
+    if (devCfg.rewriteLocalhostDomain && (cleanLandingPage.includes('localhost') || cleanLandingPage.includes('127.0.0.1'))) {
+      cleanLandingPage = cleanLandingPage.replace(/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/, prodDomain);
+    }
+
+    let cleanReferrer = document.referrer || devCfg.defaultReferrer || '';
+    if (devCfg.rewriteLocalhostDomain && (cleanReferrer.includes('localhost') || cleanReferrer.includes('127.0.0.1') || !cleanReferrer)) {
+      cleanReferrer = devCfg.defaultReferrer || 'android-app://com.google.android.googlequicksearchbox/';
+    }
+
     const ptQueryParams = new URLSearchParams({
       utm_source: payloadData.utm_source || 'Microsite',
       utm_medium: payloadData.utm_medium || 'organic',
@@ -306,8 +315,8 @@ function RSLeadSubmit(form, event) {
       wbraid: payloadData.wbraid || '',
       campaign_name: payloadData.campaign_name || '',
       sub_source: payloadData.sub_source || '',
-      landing_page: payloadData.landing_page || payloadData.SourceURL || window.location.href,
-      referrer: document.referrer || 'android-app://com.google.android.googlequicksearchbox/',
+      landing_page: cleanLandingPage,
+      referrer: cleanReferrer,
       sourceDomain: 'Microsite'
     });
 
@@ -321,11 +330,11 @@ function RSLeadSubmit(form, event) {
       phone: (payloadData.phone || '').replace(/\D/g, '').slice(-10),
       countryId: '1',
       source: payloadData.utm_source || 'Microsite',
-      projectId: String(payloadData.projectId || window.PROJECT_ID || '3523522'),
-      projectName: payloadData.projectName || window.PROJECT_NAME || 'Hiranandani Krisala Everland',
-      cityId: '1',
-      cityName: 'Pune',
-      city: 'Pune',
+      projectId: String(payloadData.projectId || window.PROJECT_ID || ''),
+      projectName: payloadData.projectName || window.PROJECT_NAME || '',
+      cityId: String(window.CITY_ID || '1'),
+      cityName: window.CITY_DISPLAY || 'Pune',
+      city: window.CITY_DISPLAY || 'Pune',
       gaMedium: payloadData.utm_medium || 'organic',
       campaign: payloadData.utm_campaign || '',
       addgroup: payloadData.adgroup_name || payloadData.ad_group_name || '',
@@ -336,12 +345,21 @@ function RSLeadSubmit(form, event) {
       wbraid: payloadData.wbraid || '',
       query: payloadData.comments || 'Please arrange a callback',
       device: payloadData.device || (window.innerWidth < 768 ? 'mobile' : 'desktop'),
-      userIP: '14.96.58.62',
+      userIP: devCfg.mockUserIP || '14.96.58.62',
+      ip_address: devCfg.mockUserIP || '14.96.58.62',
+      landing_page: cleanLandingPage,
+      landingPage: cleanLandingPage,
+      SourceURL: cleanLandingPage,
+      sourceurl: cleanLandingPage,
+      referrer: cleanReferrer,
+      utm_source: payloadData.utm_source || 'Microsite',
+      utm_medium: payloadData.utm_medium || 'organic',
+      utm_campaign: payloadData.utm_campaign || '',
       sendOtp: false,
       isTemp: false,
       fullname: payloadData.fullname,
       form_name: payloadData.form_name || 'Popup Modal',
-      sheet_name: payloadData.sheet_name || 'Pune'
+      sheet_name: payloadData.sheet_name || window.SHEET_NAME || ''
     };
 
     const crmUrl = 'https://www.proptiger.com/data/v1/entity/enquiry?' + ptQueryParams.toString();
@@ -354,49 +372,70 @@ function RSLeadSubmit(form, event) {
       body: JSON.stringify(ptPayload)
     });
 
+    // Also dispatch to Google Sheet Webhook if configured
+    if (window.SHEET_WEBHOOK) {
+      try {
+        const sheetData = new URLSearchParams();
+        sheetData.append('secret', payloadData.secret || window.SECRET_KEY || '');
+        sheetData.append('projectid', payloadData.projectId || window.PROJECT_ID || '');
+        sheetData.append('projectname', payloadData.projectName || window.PROJECT_NAME || '');
+        sheetData.append('fullname', payloadData.fullname || (firstName + ' ' + lastName).trim());
+        sheetData.append('firstname', firstName);
+        sheetData.append('lastname', lastName);
+        sheetData.append('email', payloadData.email || '');
+        sheetData.append('mobile', (payloadData.phone || '').replace(/\D/g, '').slice(-10));
+        sheetData.append('comments', payloadData.comments || '');
+        sheetData.append('utm_source', payloadData.utm_source || 'Microsite');
+        sheetData.append('utm_medium', payloadData.utm_medium || 'organic');
+        sheetData.append('utm_campaign', payloadData.utm_campaign || '');
+        sheetData.append('utm_term', payloadData.utm_term || '');
+        sheetData.append('utm_content', payloadData.utm_content || '');
+        sheetData.append('campaign_name', payloadData.campaign_name || '');
+        sheetData.append('sub_source', payloadData.sub_source || '');
+        sheetData.append('utm_id', payloadData.utm_id || '');
+        sheetData.append('ad_name', payloadData.ad_name || '');
+        sheetData.append('ad_group_name', payloadData.ad_group_name || '');
+        sheetData.append('ad_group_id', payloadData.ad_group_id || '');
+        sheetData.append('gclid', payloadData.gclid || '');
+        sheetData.append('gbraid', payloadData.gbraid || '');
+        sheetData.append('wbraid', payloadData.wbraid || '');
+        sheetData.append('fbclid', payloadData.fbclid || '');
+        sheetData.append('sourceurl', payloadData.landing_page || payloadData.SourceURL || window.location.href);
+        sheetData.append('landing_page', payloadData.landing_page || payloadData.SourceURL || window.location.href);
+        sheetData.append('device', payloadData.device || (window.innerWidth < 768 ? 'mobile' : 'desktop'));
+        sheetData.append('referrer', document.referrer || '');
+        sheetData.append('formname', payloadData.form_name || 'Popup Modal');
+        sheetData.append('projectcity', payloadData.city || window.CITY_DISPLAY || '');
+        sheetData.append('sheet_name', payloadData.sheet_name || window.SHEET_NAME || '');
+
+        fetch(window.SHEET_WEBHOOK, {
+          method: 'POST',
+          mode: 'no-cors',
+          body: sheetData
+        }).catch(() => {});
+      } catch (err) {
+        console.warn('Google Sheet webhook dispatch notice:', err);
+      }
+    }
+
     if (res.ok) {
       return { status: true, crm: res.status };
     }
     throw new Error('CRM returned HTTP ' + res.status);
   }
 
-  const isCloudflareStatic = window.location.hostname.includes('.workers.dev') ||
-                             window.location.hostname.includes('.pages.dev') ||
-                             window.location.hostname.includes('github.io');
-
-  let submitAction;
-  if (isCloudflareStatic) {
-    // Cloudflare Workers/Pages static previews have no PHP runtime;
-    // Call PropTiger CRM API directly so DevTools Network Tab shows 200 OK (GREEN)!
-    const payloadObj = {};
-    for (let [k, v] of payload.entries()) {
-      payloadObj[k] = v;
-    }
-    submitAction = submitDirectToCrm(payloadObj);
-  } else {
-    // PHP servers (Custom domain / cPanel / Apache / Nginx / localhost)
-    submitAction = fetch("submit-lead.php", {
-      method: "POST",
-      body: payload,
-      cache: "no-store",
-    }).then(async (res) => {
-      if (res.status === 405 || res.status === 404 || (!res.ok && res.status !== 400)) {
-        const payloadObj = {};
-        for (let [k, v] of payload.entries()) {
-          payloadObj[k] = v;
-        }
-        return submitDirectToCrm(payloadObj);
-      }
-      return res.json();
-    });
+  // Convert payload to plain object and submit directly to PropTiger CRM & Google Sheet
+  const payloadObj = {};
+  for (let [k, v] of payload.entries()) {
+    payloadObj[k] = v;
   }
 
-  submitAction
+  submitDirectToCrm(payloadObj)
     .then((res) => {
       if (res && (res.status === true || res.result === "success")) {
         // Update GCLID Count on Success (Exact Tata Ghansoli Replica)
-        const prjId = window.PROJECT_ID || '3523522';
-        if (form._gclid) {
+        const prjId = window.PROJECT_ID || '';
+        if (form._gclid && prjId) {
           const newCount = form._currentCount + 1;
           document.cookie = `lead_trk_${prjId}_${form._gclid}=${newCount}; max-age=2592000; path=/`;
 

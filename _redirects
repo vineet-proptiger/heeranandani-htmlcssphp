@@ -1,0 +1,20 @@
+# ═══════════════════════════════════════════════════
+# CLOUDFLARE PAGES CLEAN URLS & SLUG REWRITES
+# ═══════════════════════════════════════════════════
+
+# Slug: /new-launch rewrites to index.html with 200 OK (preserves UTM & tracking params)
+/new-launch           /index.html               200
+/new-launch/          /index.html               200
+
+# Clean Slugs for subpages (without .html)
+/privacy-policy       /privacy-policy.html      200
+/privacy-policy/      /privacy-policy.html      200
+
+/terms-and-conditions /terms-and-conditions.html 200
+/terms-and-conditions/ /terms-and-conditions.html 200
+
+/faqs                 /faqs.html                200
+/faqs/                /faqs.html                200
+
+/sitemap              /sitemap.html             200
+/sitemap/             /sitemap.html             200

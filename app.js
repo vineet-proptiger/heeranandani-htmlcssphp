@@ -31,25 +31,8 @@ let curGalleryLightboxIdx = 0;
 let curAmenitiesLightboxIdx = 0;
 
 document.addEventListener("DOMContentLoaded", () => {
-  const components = [];
-
-  const loadPromises = components.map((comp) => {
-    const placeholder = document.querySelector(`[data-replace="${comp}"]`);
-    if (!placeholder) return Promise.resolve();
-
-    return fetch(`components/${comp}.html?v=${Date.now()}`, { cache: "no-store" })
-      .then((res) => res.text())
-      .then((html) => {
-        placeholder.outerHTML = html;
-      })
-      .catch((err) => console.error(err));
-  });
-
-  Promise.all(loadPromises).then(() => {
-    console.log("All components loaded. Initializing scripts...");
-
-    // Show popup modal after 30 seconds
-    setTimeout(() => {
+  // Show popup modal after 30 seconds
+  setTimeout(() => {
       const modalEl = document.getElementById("leadModal");
       if (modalEl) {
         if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
@@ -501,10 +484,9 @@ document.addEventListener("DOMContentLoaded", () => {
     if (callNumber) {
       document.querySelectorAll('a[href^="tel:"]').forEach((el) => {
         el.href = "tel:+" + callNumber.replace(/^\+/, "");
-        el.innerHTML = el.innerHTML.replace(
-          /\+?91\s*9513550974|\+?91\s*919596286287|\+?91\s*9718344024|\+?91\s*9560582493/g,
-          "+91 " + callNumber.replace(/^91/, ""),
-        );
+        if (window.CALL_DISPLAY) {
+          el.innerHTML = el.innerHTML.replace(/\+?91[\s\d-]+/g, window.CALL_DISPLAY);
+        }
       });
     }
 
@@ -525,7 +507,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     document.dispatchEvent(new Event("componentsLoaded"));
-  });
 });
 
 // ── Global Floor Plan Toggle (Master Plan vs Floor Plans) ──
