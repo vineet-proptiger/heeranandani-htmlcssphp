@@ -99,7 +99,9 @@ window.collectTrackingData = function () {
     landing_page:  typeof window !== 'undefined' ? window.location.href : '',
     referrer:      typeof document !== 'undefined' ? document.referrer : '',
     device:        typeof window !== 'undefined' ? (window.innerWidth < 768 ? 'mobile' : 'desktop') : '',
-    ip_address:    '',
+    ip_address:    (typeof window !== 'undefined' && window.USER_CLIENT_IP) ? window.USER_CLIENT_IP : '',
+    ipaddress:     (typeof window !== 'undefined' && window.USER_CLIENT_IP) ? window.USER_CLIENT_IP : '',
+    Ipaddress:     (typeof window !== 'undefined' && window.USER_CLIENT_IP) ? window.USER_CLIENT_IP : '',
     geo_city:      '',
     geo_region:    '',
     geo_postal:    '',
@@ -202,6 +204,12 @@ window.buildTrackingFields = function () {
 
   // Update dynamic values (like the current page where form is being submitted)
   finalTrackingData.CurrentURL = typeof window !== 'undefined' ? window.location.href : '';
+  
+  if (typeof window !== 'undefined' && window.USER_CLIENT_IP) {
+    finalTrackingData.ip_address = window.USER_CLIENT_IP;
+    finalTrackingData.ipaddress = window.USER_CLIENT_IP;
+    finalTrackingData.Ipaddress = window.USER_CLIENT_IP;
+  }
   
   return finalTrackingData;
 }

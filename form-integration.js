@@ -62,6 +62,9 @@ window.autoPopulateTrackingForms = function () {
 
     const lp = form.querySelector('[name="landing_page"]');
     if (lp) lp.value = cookieTracking.landing_page || window.location.href;
+
+    const ipInp = form.querySelector('[name="Ipaddress"], [name="ipaddress"], [name="ip_address"]');
+    if (ipInp && window.USER_CLIENT_IP) ipInp.value = window.USER_CLIENT_IP;
   });
 };
 
@@ -72,10 +75,37 @@ if (typeof document !== 'undefined') {
 }
 
 /* =========================================
-   USER IP (Handled Server-side in submit-lead.php)
+   USER IP RESOLUTION (Async Non-Blocking Cache)
 ========================================= */
-// Redundant client-side ipify fetch removed to save 289ms latency and 1 network request.
-// Server submit-lead.php extracts client IP directly via HTTP_CF_CONNECTING_IP / REMOTE_ADDR.
+window.USER_CLIENT_IP = '';
+
+(function initUserIp() {
+  if (typeof window === 'undefined') return;
+  try {
+    const cached = sessionStorage.getItem('rs_user_client_ip');
+    if (cached) {
+      window.USER_CLIENT_IP = cached;
+      return;
+    }
+  } catch (e) {}
+
+  fetch('https://api.ipify.org?format=json')
+    .then((r) => r.json())
+    .then((data) => {
+      if (data && data.ip) {
+        window.USER_CLIENT_IP = data.ip;
+        try {
+          sessionStorage.setItem('rs_user_client_ip', data.ip);
+        } catch (e) {}
+
+        document.querySelectorAll('form.rs-lead-form').forEach((form) => {
+          const ipInput = form.querySelector('[name="Ipaddress"], [name="ipaddress"], [name="ip_address"]');
+          if (ipInput) ipInput.value = data.ip;
+        });
+      }
+    })
+    .catch(() => {});
+})();
 
 /* =========================================
    LIVE VALIDATION RESET
@@ -354,6 +384,30 @@ function RSLeadSubmit(form, event) {
     const firstName = fName || '';
     const lastName = lParts.join(' ') || firstName;
 
+    // Resolve client IP (exact Godrej Bandra replica logic with client-side fallback)
+    let clientUserIP =
+      window.USER_CLIENT_IP ||
+      payloadData.ipaddress ||
+      payloadData.Ipaddress ||
+      payloadData.ip_address ||
+      '';
+
+    if (!clientUserIP && typeof fetch !== 'undefined') {
+      try {
+        const ipRes = await Promise.race([
+          fetch('https://api.ipify.org?format=json').then((r) => r.json()),
+          new Promise((_, reject) => setTimeout(() => reject('timeout'), 700))
+        ]);
+        if (ipRes && ipRes.ip) {
+          clientUserIP = ipRes.ip;
+          window.USER_CLIENT_IP = ipRes.ip;
+          try { sessionStorage.setItem('rs_user_client_ip', ipRes.ip); } catch (e) {}
+        }
+      } catch (e) {}
+    }
+
+    const finalIp = clientUserIP || devCfg.mockUserIP || '14.96.58.62';
+
     const ptPayload = {
       name: (payloadData.fullname || (firstName + ' ' + lastName)).trim(),
       email: payloadData.email || '',
@@ -375,8 +429,8 @@ function RSLeadSubmit(form, event) {
       wbraid: payloadData.wbraid || '',
       query: payloadData.comments || 'Please arrange a callback',
       device: payloadData.device || (window.innerWidth < 768 ? 'mobile' : 'desktop'),
-      userIP: devCfg.mockUserIP || '14.96.58.62',
-      ip_address: devCfg.mockUserIP || '14.96.58.62',
+      userIP: finalIp,
+      ip_address: finalIp,
       landing_page: cleanLandingPage,
       landingPage: cleanLandingPage,
       SourceURL: cleanLandingPage,
@@ -434,6 +488,8 @@ function RSLeadSubmit(form, event) {
         sheetData.append('landing_page', payloadData.landing_page || payloadData.SourceURL || window.location.href);
         sheetData.append('device', payloadData.device || (window.innerWidth < 768 ? 'mobile' : 'desktop'));
         sheetData.append('referrer', document.referrer || '');
+        sheetData.append('ipaddress', clientUserIP || finalIp);
+        sheetData.append('ip_address', clientUserIP || finalIp);
         sheetData.append('formname', payloadData.form_name || 'Popup Modal');
         sheetData.append('projectcity', payloadData.city || window.CITY_DISPLAY || '');
         sheetData.append('sheet_name', payloadData.sheet_name || window.SHEET_NAME || '');
